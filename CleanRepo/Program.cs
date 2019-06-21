@@ -1,9 +1,9 @@
 ﻿using Newtonsoft.Json;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -17,7 +17,7 @@ namespace CleanRepo
         {
             // Command line options
             var options = new Options();
-            bool parsedArgs = CommandLine.Parser.Default.ParseArguments(args, options);
+            var parsedArgs = CommandLine.Parser.Default.ParseArguments(args, options);
 
             if (parsedArgs)
             {
@@ -33,8 +33,8 @@ namespace CleanRepo
                 {
                     Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory and its subdirectories for orphaned topics...");
 
-                    List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
-                    List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
+                    var tocFiles = GetTocFiles(options.InputDirectory);
+                    var markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
 
                     if (tocFiles is null || markdownFiles is null)
                     {
@@ -49,8 +49,8 @@ namespace CleanRepo
                     Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory and its subdirectories for " +
                         $"topics that appear more than once in one or more TOC files...\n");
 
-                    List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
-                    List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
+                    var tocFiles = GetTocFiles(options.InputDirectory);
+                    var markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
 
                     if (tocFiles is null || markdownFiles is null)
                     {
@@ -62,10 +62,10 @@ namespace CleanRepo
                 // Find orphaned images
                 else if (options.FindOrphanedImages)
                 {
-                    string recursive = options.SearchRecursively ? "recursively " : "";
+                    var recursive = options.SearchRecursively ? "recursively " : "";
                     Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory {recursive}for orphaned .png files...\n");
 
-                    Dictionary<string, int> imageFiles = GetMediaFiles(options.InputDirectory, options.SearchRecursively);
+                    var imageFiles = GetMediaFiles(options.InputDirectory, options.SearchRecursively);
 
                     if (imageFiles.Count == 0)
                     {
@@ -78,11 +78,11 @@ namespace CleanRepo
                 // Find orphaned include-type files
                 else if (options.FindOrphanedIncludes)
                 {
-                    string recursive = options.SearchRecursively ? "recursively " : "";
+                    var recursive = options.SearchRecursively ? "recursively " : "";
                     Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory {recursive}for orphaned .md files " +
                         $"in directories named 'includes' or '_shared'.");
 
-                    Dictionary<string, int> includeFiles = GetIncludeFiles(options.InputDirectory, options.SearchRecursively);
+                    var includeFiles = GetIncludeFiles(options.InputDirectory, options.SearchRecursively);
 
                     if (includeFiles.Count == 0)
                     {
@@ -98,7 +98,7 @@ namespace CleanRepo
                     Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for links to redirected topics...\n");
 
                     // Find the .openpublishing.redirection.json file for the directory
-                    FileInfo redirectsFile = GetRedirectsFile(options.InputDirectory);
+                    var redirectsFile = GetRedirectsFile(options.InputDirectory);
 
                     if (redirectsFile == null)
                     {
@@ -107,7 +107,7 @@ namespace CleanRepo
                     }
 
                     // Put all the redirected files in a list
-                    List<Redirect> redirects = GetAllRedirectedFiles(redirectsFile);
+                    var redirects = GetAllRedirectedFiles(redirectsFile);
                     if (redirects is null)
                     {
                         Console.WriteLine("\nDid not find any redirects - exiting.");
@@ -115,7 +115,7 @@ namespace CleanRepo
                     }
 
                     // Get all the markdown and YAML files.
-                    List<FileInfo> linkingFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
+                    var linkingFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
                     linkingFiles.AddRange(GetYAMLFiles(options.InputDirectory, options.SearchRecursively));
 
                     // Check all links, including in toc.yml, to files in the redirects list.
@@ -150,7 +150,7 @@ namespace CleanRepo
             // Gather up all the include references and increment the count for that include file in the Dictionary.
             foreach (var markdownFile in files)
             {
-                foreach (string line in File.ReadAllLines(markdownFile.FullName))
+                foreach (var line in File.ReadAllLines(markdownFile.FullName))
                 {
                     // Example include references:
                     // [!INCLUDE [DotNet Restore Note](../includes/dotnet-restore-note.md)]
@@ -167,7 +167,7 @@ namespace CleanRepo
                     foreach (Match match in Regex.Matches(line, includeLinkPattern, RegexOptions.IgnoreCase))
                     {
                         // Get the first capture group, which is the relative path ending in '.md'.
-                        string relativePath = match.Groups[1].Value.Trim();
+                        var relativePath = match.Groups[1].Value.Trim();
 
                         if (relativePath != null)
                         {
@@ -204,10 +204,10 @@ namespace CleanRepo
                 }
             }
 
-            int count = 0;
+            var count = 0;
 
             // Print out the INCLUDE files that have zero references.
-            StringBuilder output = new StringBuilder();
+            var output = new StringBuilder();
             foreach (var includeFile in includeFiles)
             {
                 if (includeFile.Value == 0)
@@ -229,7 +229,7 @@ namespace CleanRepo
                 }
             }
 
-            string deleted = deleteOrphanedIncludes ? "and deleted " : "";
+            var deleted = deleteOrphanedIncludes ? "and deleted " : "";
 
             Console.WriteLine($"\nFound {deleted}{count} orphaned INCLUDE files:\n");
             Console.WriteLine(output.ToString());
@@ -243,14 +243,14 @@ namespace CleanRepo
         /// <returns></returns>
         private static Dictionary<string, int> GetIncludeFiles(string inputDirectory, bool searchRecursively)
         {
-            DirectoryInfo dir = new DirectoryInfo(inputDirectory);
+            var dir = new DirectoryInfo(inputDirectory);
 
-            SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+            var searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
-            Dictionary<string, int> includeFiles = new Dictionary<string, int>();
+            var includeFiles = new Dictionary<string, int>();
 
-            if (String.Compare(dir.Name, "includes", true) == 0
-                || String.Compare(dir.Name, "_shared", true) == 0)
+            if (string.Compare(dir.Name, "includes", true) == 0
+                || string.Compare(dir.Name, "_shared", true) == 0)
             {
                 // This is a folder that is likely to contain "include"-type files, i.e. files that aren't in the TOC.
 
@@ -264,8 +264,8 @@ namespace CleanRepo
             {
                 foreach (var subDirectory in dir.EnumerateDirectories("*", SearchOption.AllDirectories))
                 {
-                    if (String.Compare(subDirectory.Name, "includes", true) == 0
-                        || String.Compare(subDirectory.Name, "_shared", true) == 0)
+                    if (string.Compare(subDirectory.Name, "includes", true) == 0
+                        || string.Compare(subDirectory.Name, "_shared", true) == 0)
                     {
                         // This is a folder that is likely to contain "include"-type files, i.e. files that aren't in the TOC.
 
@@ -312,7 +312,7 @@ namespace CleanRepo
             // Gather up all the image references and increment the count for that image in the Dictionary.
             foreach (var markdownFile in files)
             {
-                foreach (string line in File.ReadAllLines(markdownFile.FullName))
+                foreach (var line in File.ReadAllLines(markdownFile.FullName))
                 {
                     /* Support all of the following variations:
                     *
@@ -327,12 +327,12 @@ namespace CleanRepo
                     */
 
                     // RegEx pattern to match
-                    string mdImageRegEx = @"\]\(([^\)]*?.png)";
+                    var mdImageRegEx = @"\]\(([^\)]*?.png)";
 
                     // There could be more than one image reference on the line, hence the foreach loop.
                     foreach (Match match in Regex.Matches(line, mdImageRegEx, RegexOptions.IgnoreCase))
                     {
-                        string relativePath = match.Groups[1].Value.Trim();
+                        var relativePath = GetFilePathFromLink(match.Groups[0].Value);
 
                         if (relativePath.StartsWith("/") || relativePath.StartsWith("http"))
                         {
@@ -385,10 +385,10 @@ namespace CleanRepo
                     // Match "img src=" references
                     // Example: <img data-hoverimage="./images/getstarted.svg" src="./images/getstarted.png" alt="Get started icon" />
 
-                    string htmlImageRegEx = "<img[^>]*src[ ]*=[ ]*\"([^>]*.png).*\".*>{1}?";
+                    var htmlImageRegEx = "<img[^>]*src[ ]*=[ ]*\"([^>]*.png).*\".*>{1}?";
                     foreach (Match match in Regex.Matches(line, htmlImageRegEx, RegexOptions.IgnoreCase))
                     {
-                        string relativePath = match.Groups[1].Value.Trim();
+                        var relativePath = GetFilePathFromLink(match.Groups[0].Value);
 
                         if (relativePath.StartsWith("/") || relativePath.StartsWith("http"))
                         {
@@ -427,11 +427,10 @@ namespace CleanRepo
                     // Match reference-style image links
                     // Example: [0]: ../../media/vs-acr-provisioning-dialog-2019.png
 
-                    string referenceLinkRegEx = @"\[.*\]:(.*\.png)";
+                    var referenceLinkRegEx = @"\[.*\]:(.*\.png)";
                     foreach (Match match in Regex.Matches(line, referenceLinkRegEx, RegexOptions.IgnoreCase))
                     {
-                        string relativePath = match.Groups[1].Value.Trim();
-
+                        var relativePath = GetFilePathFromLink(match.Groups[1].Value.Trim());
                         if (relativePath.StartsWith("/") || relativePath.StartsWith("http"))
                         {
                             // The file is in a different repo, so ignore it.
@@ -443,7 +442,7 @@ namespace CleanRepo
                         if (relativePath != null)
                         {
                             // Construct the full path to the referenced image file
-                            string fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+                            var fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
 
                             // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                             fullPath = TryGetFullPath(fullPath);
@@ -457,10 +456,10 @@ namespace CleanRepo
                 }
             }
 
-            int count = 0;
+            var count = 0;
 
             // Print out the image files with zero references.
-            StringBuilder output = new StringBuilder();
+            var output = new StringBuilder();
             foreach (var image in imageFiles)
             {
                 if (image.Value == 0)
@@ -489,7 +488,7 @@ namespace CleanRepo
                 }
             }
 
-            string deleted = deleteOrphanedImages ? "and deleted " : "";
+            var deleted = deleteOrphanedImages ? "and deleted " : "";
 
             Console.WriteLine($"\nFound {deleted}{count} orphaned .png files:\n");
             Console.WriteLine(output.ToString());
@@ -515,11 +514,11 @@ namespace CleanRepo
         /// </summary>
         private static Dictionary<string, int> GetMediaFiles(string mediaDirectory, bool searchRecursively = true)
         {
-            DirectoryInfo dir = new DirectoryInfo(mediaDirectory);
+            var dir = new DirectoryInfo(mediaDirectory);
 
-            SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+            var searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
-            Dictionary<string, int> mediaFiles = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var mediaFiles = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var file in dir.EnumerateFiles("*.png", searchOption))
             {
@@ -541,18 +540,18 @@ namespace CleanRepo
             var countDeleted = 0;
             var countNotDeleted = 0;
 
-            StringBuilder output = new StringBuilder("\nTopics not in any TOC file:\n\n");
-            StringBuilder deleteOutput = new StringBuilder();
+            var output = new StringBuilder("\nTopics not in any TOC file:\n\n");
+            var deleteOutput = new StringBuilder();
 
             foreach (var markdownFile in markdownFiles)
             {
-                bool found = false;
+                var found = false;
 
                 // If the file is in the Includes directory, or the file is a TOC or index file, ignore it
                 if (markdownFile.FullName.Contains("\\includes\\")
                     || markdownFile.FullName.Contains("\\_shared\\")
-                    || String.Compare(markdownFile.Name, "TOC.md", true) == 0
-                    || String.Compare(markdownFile.Name, "index.md", true) == 0)
+                    || string.Compare(markdownFile.Name, "TOC.md", true) == 0
+                    || string.Compare(markdownFile.Name, "index.md", true) == 0)
                     continue;
 
                 foreach (var tocFile in tocFiles)
@@ -611,7 +610,7 @@ namespace CleanRepo
 
         private static bool IsFileLinkedFromTocFile(FileInfo linkedFile, FileInfo tocFile)
         {
-            string text = File.ReadAllText(tocFile.FullName);
+            var text = File.ReadAllText(tocFile.FullName);
 
             // Example links .yml/.md:
             // href: ide/managing-external-tools.md
@@ -625,11 +624,7 @@ namespace CleanRepo
             foreach (Match match in Regex.Matches(text, linkRegEx, RegexOptions.IgnoreCase))
             {
                 // Get the file-relative path to the linked file.
-                string relativePath = match.Groups[1].Value.Trim();
-
-                // Remove any quotation marks
-                relativePath = relativePath.Replace("\"", "");
-
+                var relativePath = GetFilePathFromLink(match.Groups[1].Value.Trim())?.Replace("\"", "");
                 if (relativePath.StartsWith("/") || relativePath.StartsWith("http"))
                 {
                     // The file is in a different repo, so ignore it.
@@ -641,15 +636,14 @@ namespace CleanRepo
                 if (relativePath != null)
                 {
                     // Construct the full path to the referenced file
-                    string fullPath = Path.Combine(tocFile.DirectoryName, relativePath);
-
+                    var fullPath = Path.Combine(tocFile.DirectoryName, relativePath);
                     // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                     fullPath = Path.GetFullPath(fullPath);
 
                     if (fullPath != null)
                     {
                         // See if our constructed path matches the actual file we think it is
-                        if (String.Compare(fullPath, linkedFile.FullName, true) == 0)
+                        if (string.Compare(fullPath, linkedFile.FullName, true) == 0)
                         {
                             return true;
                         }
@@ -676,11 +670,11 @@ namespace CleanRepo
 
         private static FileInfo GetRedirectsFile(string inputDirectory)
         {
-            DirectoryInfo dir = new DirectoryInfo(inputDirectory);
+            var dir = new DirectoryInfo(inputDirectory);
 
             try
             {
-                FileInfo[] files = dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly);
+                var files = dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly);
                 while (dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly).Length == 0)
                 {
                     dir = dir.Parent;
@@ -701,9 +695,9 @@ namespace CleanRepo
 
         private static List<Redirect> LoadRedirectJson(FileInfo redirectsFile)
         {
-            using (StreamReader reader = new StreamReader(redirectsFile.FullName))
+            using (var reader = new StreamReader(redirectsFile.FullName))
             {
-                string json = reader.ReadToEnd();
+                var json = reader.ReadToEnd();
 
                 // Trim the string so we're just left with an array of redirect objects
                 json = json.Trim();
@@ -724,19 +718,19 @@ namespace CleanRepo
 
         private static List<Redirect> GetAllRedirectedFiles(FileInfo redirectsFile)
         {
-            List<Redirect> redirects = LoadRedirectJson(redirectsFile);
+            var redirects = LoadRedirectJson(redirectsFile);
 
             if (redirects is null)
             {
                 return null;
             }
 
-            foreach (Redirect redirect in redirects)
+            foreach (var redirect in redirects)
             {
                 if (redirect.source_path != null)
                 {
                     // Construct the full path to the redirected file
-                    string fullPath = Path.Combine(redirectsFile.DirectoryName, redirect.source_path);
+                    var fullPath = Path.Combine(redirectsFile.DirectoryName, redirect.source_path);
 
                     // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                     fullPath = Path.GetFullPath(fullPath);
@@ -750,15 +744,15 @@ namespace CleanRepo
 
         private static void FindRedirectLinks(List<Redirect> redirects, List<FileInfo> linkingFiles, bool replaceLinks)
         {
-            Dictionary<string, Redirect> redirectLookup = Enumerable.ToDictionary<Redirect, string>(redirects, r => r.source_path);
+            var redirectLookup = Enumerable.ToDictionary<Redirect, string>(redirects, r => r.source_path);
 
             // For each file...
             foreach (var linkingFile in linkingFiles)
             {
-                bool foundOldLink = false;
-                StringBuilder output = new StringBuilder($"FILE '{linkingFile.FullName}' contains the following link(s) to redirected files:\n\n");
+                var foundOldLink = false;
+                var output = new StringBuilder($"FILE '{linkingFile.FullName}' contains the following link(s) to redirected files:\n\n");
 
-                string text = File.ReadAllText(linkingFile.FullName);
+                var text = File.ReadAllText(linkingFile.FullName);
 
                 string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ?
                     @"href:(.*\.md)" :
@@ -768,13 +762,13 @@ namespace CleanRepo
                 foreach (Match match in Regex.Matches(text, linkRegEx, RegexOptions.IgnoreCase))
                 {
                     // Get the file-relative path to the linked file.
-                    string relativePath = match.Groups[1].Value.Trim();
+                    var relativePath = GetFilePathFromLink(match.Groups[1].Value.Trim());
 
                     // Remove any quotation marks
                     text = text.Replace("\"", "");
 
                     // Construct the full path to the linked file.
-                    string fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
+                    var fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
                     // Clean up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                     try
                     {
@@ -797,11 +791,11 @@ namespace CleanRepo
                             // Replace the link if requested.
                             if (replaceLinks)
                             {
-                                string redirectURL = redirectLookup[fullPath].redirect_url;
+                                var redirectURL = redirectLookup[fullPath].redirect_url;
 
                                 output.AppendLine($"REPLACING '{relativePath}' with '{redirectURL}'.");
 
-                                string newText = text.Replace(relativePath, redirectURL);
+                                var newText = text.Replace(relativePath, redirectURL);
                                 File.WriteAllText(linkingFile.FullName, newText);
                             }
                         }
@@ -823,11 +817,11 @@ namespace CleanRepo
         /// </summary>
         private static void ListPopularFiles(List<FileInfo> tocFiles, List<FileInfo> markdownFiles)
         {
-            bool found = false;
-            StringBuilder output = new StringBuilder("The following files appear in more than one TOC file:\n\n");
+            var found = false;
+            var output = new StringBuilder("The following files appear in more than one TOC file:\n\n");
 
             // Keep a hash table of each topic path with the number of times it's referenced
-            Dictionary<string, int> topics = markdownFiles.ToDictionary<FileInfo, string, int>(mf => mf.FullName, mf => 0);
+            var topics = markdownFiles.ToDictionary<FileInfo, string, int>(mf => mf.FullName, mf => 0);
 
             foreach (var markdownFile in markdownFiles)
             {
@@ -873,46 +867,26 @@ namespace CleanRepo
                 return false;
             }
 
-            foreach (string line in File.ReadAllLines(linkingFile.FullName))
+            foreach (var line in 
+                File.ReadAllLines(linkingFile.FullName)
+                    .Where(str => !string.IsNullOrWhiteSpace(str)
+                               && str.Contains(linkedFile.Name)))
             {
-                // Example links .yml/.md:
-                // href: ide/managing-external-tools.md
-                // [Managing External Tools](ide/managing-external-tools.md)
-
-                string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ?
-                    @"href:(.*?" + linkedFile.Name + ")" :
-                    @"\]\((?!http)(([^\)])*?" + linkedFile.Name + @")";
-
-                // For each link that contains the file name...
-                foreach (Match match in Regex.Matches(line, linkRegEx, RegexOptions.IgnoreCase))
+                foreach (var link in FindAllLinksInLine(line))
                 {
-                    // Get the file-relative path to the linked file.
-                    string relativePath = match.Groups[1].Value.Trim();
-
-                    // Remove any quotation marks
-                    relativePath = relativePath.Replace("\"", "");
-
+                    // Now verify the file path to ensure we're talking about the same file
+                    var relativePath = GetFilePathFromLink($"]({link})");
                     if (relativePath != null)
                     {
-                        string fullPath;
-                        try
-                        {
-                            // Construct the full path to the referenced file
-                            fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
-                        }
-                        catch (ArgumentException e)
-                        {
-                            Console.WriteLine($"\nCaught exception while constructing full path " +
-                                $"for '{relativePath}' in '{linkingFile.FullName}': {e.Message}");
-                            throw;
-                        }
+                        // Construct the full path to the referenced file
+                        var fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
 
                         // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                         fullPath = Path.GetFullPath(fullPath);
                         if (fullPath != null)
                         {
                             // See if our constructed path matches the actual file we think it is
-                            if (String.Compare(fullPath, linkedFile.FullName, true) == 0)
+                            if (string.Compare(fullPath, linkedFile.FullName, true) == 0)
                             {
                                 return true;
                             }
@@ -922,11 +896,35 @@ namespace CleanRepo
                             }
                         }
                     }
-                }
+                }                
             }
 
             // We did not find this file linked in the specified file.
             return false;
+        }
+
+        private static IEnumerable<string> FindAllLinksInLine(string line)
+        {
+            // Find all potential link matches in a single line
+            // - **Helper library**: [Create a Content Moderator client for use in other samples](https://github.com/Azure-Samples/cognitive-services-dotnet-sdk-samples/blob/master/ContentModerator/ModeratorHelper/Clients.cs). See [quickstart](content-moderator-helper-quickstart-dotnet.md).
+            // Returns:
+            // [ 
+            //     "https://github.com/Azure-Samples/cognitive-services-dotnet-sdk-samples/blob/master/ContentModerator/ModeratorHelper/Clients.cs",
+            //     "content-moderator-helper-quickstart-dotnet.md" 
+            // ]
+
+            return IterateMatches(
+                Regex.Matches(line, @"(?<=\().+?(?=\))"), // Markdown links
+                Regex.Matches(line, @"<img[^>]*?src\s*=\s*[""']?([^'"" >]+?)[ '""][^>]*?>", RegexOptions.IgnoreCase), // src attribute in img tags
+                Regex.Matches(line, "href:.+?(.*)")); // href in yml/yaml files
+
+            IEnumerable<string> IterateMatches(params MatchCollection[] matches)
+            {
+                foreach (var match in matches.SelectMany(collection => collection.Cast<Match>()))
+                {
+                    yield return match.Value;
+                }
+            }
         }
 
         /// <summary>
@@ -934,8 +932,8 @@ namespace CleanRepo
         /// </summary>
         private static List<FileInfo> GetMarkdownFiles(string directoryPath, bool searchRecursively)
         {
-            DirectoryInfo dir = new DirectoryInfo(directoryPath);
-            SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+            var dir = new DirectoryInfo(directoryPath);
+            var searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
             return dir.EnumerateFiles("*.md", searchOption).ToList();
         }
@@ -945,8 +943,8 @@ namespace CleanRepo
         /// </summary>
         private static List<FileInfo> GetYAMLFiles(string directoryPath, bool searchRecursively)
         {
-            DirectoryInfo dir = new DirectoryInfo(directoryPath);
-            SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+            var dir = new DirectoryInfo(directoryPath);
+            var searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
             return dir.EnumerateFiles("*.yml", searchOption).ToList();
         }
@@ -972,7 +970,7 @@ namespace CleanRepo
         /// </summary>
         private static List<FileInfo> GetTocFiles(string directoryPath)
         {
-            DirectoryInfo dir = new DirectoryInfo(directoryPath);
+            var dir = new DirectoryInfo(directoryPath);
 
             // Look further up the path until we find docfx.json
             dir = GetDocFxDirectory(dir);
