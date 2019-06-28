@@ -1,7 +1,7 @@
 ﻿using Newtonsoft.Json;
 using System;
-using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -27,6 +27,9 @@ namespace CleanRepo
                     Console.WriteLine($"\nDirectory '{options.InputDirectory}' does not exist.");
                     return;
                 }
+
+                var stopwatch = new Stopwatch();
+                stopwatch.Start();
 
                 // Find orphaned topics
                 if (options.FindOrphanedTopics)
@@ -115,6 +118,9 @@ namespace CleanRepo
                     Console.WriteLine("DONE");
                 }
 
+                stopwatch.Stop();
+                Console.WriteLine($"Elapsed time: {stopwatch.Elapsed.ToHumanReadableString()}");
+
                 // Uncomment for debugging to see console output.
                 //Console.WriteLine("\nPress any key to continue.");
                 //Console.ReadLine();
@@ -130,7 +136,7 @@ namespace CleanRepo
         private static void ListOrphanedIncludes(string inputDirectory, Dictionary<string, int> includeFiles, bool deleteOrphanedIncludes)
         {
             // Get all files that could possibly link to the include files
-            var files = GetAllMarkdownFiles(inputDirectory, out DirectoryInfo rootDirectory);
+            var files = GetAllMarkdownFiles(inputDirectory, out var rootDirectory);
 
             // Gather up all the include references and increment the count for that include file in the Dictionary.
             foreach (var markdownFile in files)
@@ -275,7 +281,7 @@ namespace CleanRepo
         ///          If found, BREAK to the next image
         private static void ListOrphanedImages(string inputDirectory, Dictionary<string, int> imageFiles, bool deleteOrphanedImages)
         {
-            var files = GetAllMarkdownFiles(inputDirectory, out DirectoryInfo rootDirectory);
+            var files = GetAllMarkdownFiles(inputDirectory, out var rootDirectory);
 
             void TryIncrementFile(string key, Dictionary<string, int> fileMap)
             {
@@ -429,19 +435,6 @@ namespace CleanRepo
             Console.WriteLine("DONE");
         }
 
-        private static string TryGetFullPath(string path)
-        {
-            try
-            {
-                return Path.GetFullPath(path);
-            }
-            catch (PathTooLongException)
-            {
-                Console.WriteLine($"Unable to get path because it's too long: {path}");
-                return null;
-            }
-        }
-
         /// <summary>
         /// Returns a dictionary of all .png files in the directory.
         /// The search includes the specified directory and (optionally) all its subdirectories.
@@ -449,9 +442,7 @@ namespace CleanRepo
         private static Dictionary<string, int> GetMediaFiles(string mediaDirectory, bool searchRecursively = true)
         {
             var dir = new DirectoryInfo(mediaDirectory);
-
             var searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-
             var mediaFiles = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var file in dir.EnumerateFiles("*.png", searchOption))
@@ -542,7 +533,6 @@ namespace CleanRepo
         private static bool IsFileLinkedFromTocFile(FileInfo linkedFile, FileInfo tocFile)
         {
             var text = File.ReadAllText(tocFile.FullName);
-
             var linkRegEx = tocFile.Extension.ToLower() == ".yml" ? @"href: (.)*" + linkedFile.Name : @"]\((?!http)([^\)])*" + linkedFile.Name + @"\)";
 
             // For each link that contains the file name...
@@ -554,10 +544,7 @@ namespace CleanRepo
                 if (relativePath != null)
                 {
                     // Construct the full path to the referenced file
-                    var fullPath = Path.Combine(tocFile.DirectoryName, relativePath);
-                    // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                    fullPath = Path.GetFullPath(fullPath);
-
+                    var fullPath = TryGetFullPathFromDirectory(tocFile.DirectoryName, relativePath);
                     if (fullPath != null)
                     {
                         // See if our constructed path matches the actual file we think it is
@@ -581,9 +568,14 @@ namespace CleanRepo
         #region Redirected files
         private class Redirect
         {
-            public string source_path;
-            public string redirect_url;
-            public bool redirect_document_id;
+            [JsonProperty(PropertyName = "source_path")]
+            public string SourcePath { get; set; }
+
+            [JsonProperty(PropertyName = "redirect_url")]
+            public string RedirectUrl { get; set; }
+
+            [JsonProperty(PropertyName = "redirect_document_id")]
+            public bool RedirectDocumentId { get; set; }
         }
 
         private static FileInfo GetRedirectsFile(string inputDirectory)
@@ -645,15 +637,15 @@ namespace CleanRepo
 
             foreach (var redirect in redirects)
             {
-                if (redirect.source_path != null)
+                if (redirect.SourcePath != null)
                 {
                     // Construct the full path to the redirected file
-                    var fullPath = Path.Combine(redirectsFile.DirectoryName, redirect.source_path);
+                    var fullPath = Path.Combine(redirectsFile.DirectoryName, redirect.SourcePath);
 
                     // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                     fullPath = Path.GetFullPath(fullPath);
 
-                    redirect.source_path = fullPath;
+                    redirect.SourcePath = fullPath;
                 }
             }
 
@@ -662,7 +654,7 @@ namespace CleanRepo
 
         private static void FindRedirectLinks(List<Redirect> redirects, List<FileInfo> linkingFiles, bool replaceLinks)
         {
-            var redirectLookup = Enumerable.ToDictionary<Redirect, string>(redirects, r => r.source_path);
+            var redirectLookup = Enumerable.ToDictionary<Redirect, string>(redirects, r => r.SourcePath);
 
             // For each file...
             foreach (var linkingFile in linkingFiles)
@@ -710,7 +702,7 @@ namespace CleanRepo
                             // Replace the link if requested.
                             if (replaceLinks)
                             {
-                                var redirectURL = redirectLookup[fullPath].redirect_url;
+                                var redirectURL = redirectLookup[fullPath].RedirectUrl;
 
                                 output.AppendLine($"REPLACING '{relativePath}' with '{redirectURL}'.");
 
@@ -792,14 +784,7 @@ namespace CleanRepo
                     .SelectMany(FindAllLinksInLine)
                     .Where(filePath => !string.IsNullOrWhiteSpace(filePath)))
             {
-                // Now verify the file path to ensure we're talking about the same file
-                var combinedPath = Path.Combine(linkingFile.DirectoryName, path);
-                if (string.IsNullOrWhiteSpace(combinedPath))
-                {
-                    continue;
-                }
-
-                var fullPath = Path.GetFullPath(combinedPath);
+                var fullPath = TryGetFullPathFromDirectory(linkingFile.DirectoryName, path);
                 if (fullPath != null)
                 {
                     // See if our constructed path matches the actual file we think it is
@@ -1042,6 +1027,48 @@ namespace CleanRepo
             }
 
             return dir;
+        }
+
+        private static string TryGetFullPathFromDirectory(string directory, string path)
+        {
+            try
+            {
+                var combinedPath = Path.Combine(directory, path);
+                if (string.IsNullOrWhiteSpace(combinedPath))
+                {
+                    return null;
+                }
+
+                return TryGetFullPath(combinedPath);
+            }
+            catch (ArgumentException)
+            {
+                Console.WriteLine($"Unable to get path (perhaps illegal characters): {path}");
+                return null;
+            }
+        }
+
+        private static string TryGetFullPath(string path)
+        {
+            try
+            {
+                return Path.GetFullPath(path);
+            }
+            catch (PathTooLongException)
+            {
+                Console.WriteLine($"Unable to get path because it's too long: {path}");
+                return null;
+            }
+            catch (ArgumentException)
+            {
+                Console.WriteLine($"Unable to get path (perhaps illegal characters): {path}");
+                return null;
+            }
+            catch (NotSupportedException)
+            {
+                Console.WriteLine($"Unable to get path (perhaps format not supported): {path}");
+                return null;
+            }
         }
         #endregion
     }
