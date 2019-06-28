@@ -600,7 +600,8 @@ namespace CleanRepo
                 }
             }
 
-            output.AppendLine($"\nFound {countNotFound} .md files that aren't referenced in a TOC.");
+            var deletedMessage = deleteOrphanedTopics ? $"Deleted {countDeleted} of these files." : "";
+            output.AppendLine($"\nFound {countNotFound} .md files that aren't referenced in a TOC. {deletedMessage}\n");
             Console.Write(output.ToString());
             if (countNotDeleted > 0)
             {
@@ -867,36 +868,32 @@ namespace CleanRepo
                 return false;
             }
 
-            foreach (var line in 
+            foreach (var path in 
                 File.ReadAllLines(linkingFile.FullName)
-                    .Where(str => !string.IsNullOrWhiteSpace(str)
-                               && str.Contains(linkedFile.Name)))
+                    .Where(str => !string.IsNullOrWhiteSpace(str) && str.Contains(linkedFile.Name))
+                    .SelectMany(FindAllLinksInLine)
+                    .Where(filePath => !string.IsNullOrWhiteSpace(filePath)))
             {
-                foreach (var link in FindAllLinksInLine(line))
+                // Now verify the file path to ensure we're talking about the same file
+                var combinedPath = Path.Combine(linkingFile.DirectoryName, path);
+                if (string.IsNullOrWhiteSpace(combinedPath))
                 {
-                    // Now verify the file path to ensure we're talking about the same file
-                    var relativePath = GetFilePathFromLink($"]({link})");
-                    if (relativePath != null)
-                    {
-                        // Construct the full path to the referenced file
-                        var fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
+                    continue;
+                }
 
-                        // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                        fullPath = Path.GetFullPath(fullPath);
-                        if (fullPath != null)
-                        {
-                            // See if our constructed path matches the actual file we think it is
-                            if (string.Compare(fullPath, linkedFile.FullName, true) == 0)
-                            {
-                                return true;
-                            }
-                            else
-                            {
-                                // If we get here, the file name matched but the full path did not.
-                            }
-                        }
+                var fullPath = Path.GetFullPath(combinedPath);
+                if (fullPath != null)
+                {
+                    // See if our constructed path matches the actual file we think it is
+                    if (string.Compare(fullPath, linkedFile.FullName, true) == 0)
+                    {
+                        return true;
                     }
-                }                
+                    else
+                    {
+                        // If we get here, the file name matched but the full path did not.
+                    }
+                }
             }
 
             // We did not find this file linked in the specified file.
@@ -915,14 +912,20 @@ namespace CleanRepo
 
             return IterateMatches(
                 Regex.Matches(line, @"(?<=\().+?(?=\))"), // Markdown links
-                Regex.Matches(line, @"<img[^>]*?src\s*=\s*[""']?([^'"" >]+?)[ '""][^>]*?>", RegexOptions.IgnoreCase), // src attribute in img tags
+                Regex.Matches(line, @"<img[^>]*?src\s*=\s*[""']?([^'"" >]+?)[ '""][^>]*?>"), // src attribute in img tags
                 Regex.Matches(line, "href:.+?(.*)")); // href in yml/yaml files
 
             IEnumerable<string> IterateMatches(params MatchCollection[] matches)
             {
                 foreach (var match in matches.SelectMany(collection => collection.Cast<Match>()))
                 {
-                    yield return match.Value;
+                    var value = match.Value;
+                    if (string.IsNullOrWhiteSpace(value) || value.Contains("http"))
+                    {
+                        yield return null;
+                    }
+
+                    yield return value;
                 }
             }
         }
